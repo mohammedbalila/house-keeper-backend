@@ -30,4 +30,4 @@ We're a group of friends sharing the same house hold and having troubles keeping
 Link will be available soon
  ### Environment
 
- See [config](./env.sample).
+ See [config](./.env.sample).
