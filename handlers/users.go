@@ -6,14 +6,14 @@ import (
 
 	"github.com/go-pg/pg/v10/orm"
 	"github.com/labstack/echo/v4"
-	"github.com/mustafabalila/golang-api/models"
+	"github.com/mustafabalila/golang-api/db"
 	"github.com/mustafabalila/golang-api/utils/logger"
 )
 
-func (h DBHandler) getUsers(c echo.Context) (e error) {
+func getUsers(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
-	users := &[]models.User{}
-	err := h.DB.Model(users).Where("id != ?", c.Get("userId")).Column("id").Column("full_name").Select()
+	users := &[]db.User{}
+	err := db.Database.Model(users).Where("id != ?", c.Get("userId")).Column("id").Column("full_name").Select()
 	if err != nil {
 		logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
@@ -21,16 +21,16 @@ func (h DBHandler) getUsers(c echo.Context) (e error) {
 	return c.JSON(http.StatusOK, users)
 }
 
-func (h DBHandler) getUserStatistics(c echo.Context) (e error) {
+func getUserStatistics(c echo.Context) (e error) {
 	return c.JSON(http.StatusCreated, map[string]interface{}{})
 }
 
-func (h DBHandler) getUserPurchases(c echo.Context) (e error) {
+func getUserPurchases(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var err error
 
-	purchases := &[]models.Purchase{}
-	err = h.DB.Model(purchases).
+	purchases := &[]db.Purchase{}
+	err = db.Database.Model(purchases).
 		Where("user_id = ?", c.Get("userId")).
 		Where("is_complete = false").
 		Select()
@@ -43,7 +43,7 @@ func (h DBHandler) getUserPurchases(c echo.Context) (e error) {
 	return c.JSON(http.StatusOK, purchases)
 }
 
-func (h DBHandler) getUserPayments(c echo.Context) (e error) {
+func getUserPayments(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var err error
 	var count int
@@ -62,10 +62,10 @@ func (h DBHandler) getUserPayments(c echo.Context) (e error) {
 
 	weekAgo := date.AddDate(0, 0, -7)
 
-	payments := &[]models.PurchaseSubscription{}
+	payments := &[]db.PurchaseSubscription{}
 
 	query :=
-		h.DB.Model(payments).
+		db.Database.Model(payments).
 			Where("purchase_subscription.user_id = ?", c.Get("userId")).
 			Where("status = ?", Statuses["approved"]).
 			Where("purchase_subscription.created_at between ? and ? ", weekAgo, date).
@@ -81,7 +81,7 @@ func (h DBHandler) getUserPayments(c echo.Context) (e error) {
 		logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
-	count, err = h.DB.Model(payments).
+	count, err = db.Database.Model(payments).
 		Where("purchase_subscription.user_id = ?", c.Get("userId")).
 		Where("status = ?", Statuses["approved"]).
 		Count()
@@ -97,17 +97,17 @@ func (h DBHandler) getUserPayments(c echo.Context) (e error) {
 	return c.JSON(http.StatusOK, response)
 }
 
-func (h DBHandler) getUserMadePaymentRequests(c echo.Context) (e error) {
+func getUserMadePaymentRequests(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var err error
 
 	userId := c.Get("userId")
 	status := c.QueryParams().Get("status")
 
-	requests := &[]models.PurchaseSubscription{}
+	requests := &[]db.PurchaseSubscription{}
 
 	query :=
-		h.DB.Model(requests).
+		db.Database.Model(requests).
 			Where("purchase_subscription.user_id = ? ", userId).
 			Where("status != ? ", Statuses["created"]).
 			Relation("Purchase.id").
@@ -132,17 +132,17 @@ func (h DBHandler) getUserMadePaymentRequests(c echo.Context) (e error) {
 	return c.JSON(http.StatusOK, response)
 }
 
-func (h DBHandler) getOthersMadePaymentRequests(c echo.Context) (e error) {
+func getOthersMadePaymentRequests(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var err error
 
 	userId := c.Get("userId")
 	status := c.QueryParams().Get("status")
 
-	requests := &[]models.PurchaseSubscription{}
+	requests := &[]db.PurchaseSubscription{}
 
 	query :=
-		h.DB.Model(requests).
+		db.Database.Model(requests).
 			Relation("Purchase.id").
 			Relation("Purchase.name").
 			Relation("Purchase.share_price").
@@ -166,15 +166,15 @@ func (h DBHandler) getOthersMadePaymentRequests(c echo.Context) (e error) {
 	return c.JSON(http.StatusOK, response)
 }
 
-func (h DBHandler) getPaymentRequest(c echo.Context) (e error) {
+func getPaymentRequest(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var err error
 	userId := c.Get("userId")
 	id := c.Param("id")
 
-	request := &models.PurchaseSubscription{Id: id}
+	request := &db.PurchaseSubscription{Id: id}
 
-	err = h.DB.Model(request).
+	err = db.Database.Model(request).
 		Relation("Purchase.id").
 		Relation("Purchase.name").
 		Relation("Purchase.user_id").

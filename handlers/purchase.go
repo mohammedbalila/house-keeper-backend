@@ -9,12 +9,12 @@ import (
 	"github.com/go-pg/pg/v10"
 	"github.com/go-pg/pg/v10/orm"
 	"github.com/labstack/echo/v4"
-	"github.com/mustafabalila/golang-api/models"
+	"github.com/mustafabalila/golang-api/db"
 	"github.com/mustafabalila/golang-api/utils/logger"
 	"github.com/mustafabalila/golang-api/utils/notifications"
 )
 
-func (h DBHandler) createPurchase(c echo.Context) (e error) {
+func createPurchase(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var _, err error
 	input := &CreatePurchase{}
@@ -25,7 +25,7 @@ func (h DBHandler) createPurchase(c echo.Context) (e error) {
 	}
 	sharePrice := input.TotalPrice / float64(len(input.Subscribers)+1)
 
-	purchase := &models.Purchase{
+	purchase := &db.Purchase{
 		UserId:      fmt.Sprintf("%s", c.Get("userId")),
 		Name:        input.Name,
 		Category:    input.Category,
@@ -33,13 +33,13 @@ func (h DBHandler) createPurchase(c echo.Context) (e error) {
 		Description: input.Description,
 		TotalPrice:  math.Round(input.TotalPrice),
 	}
-	_, err = h.DB.Model(purchase).Insert()
+	_, err = db.Database.Model(purchase).Insert()
 	if err != nil {
 		logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
 
-	tx, err := h.DB.Begin()
+	tx, err := db.Database.Begin()
 	if err != nil {
 		tx.Rollback()
 		logger.Error(err.Error())
@@ -49,7 +49,7 @@ func (h DBHandler) createPurchase(c echo.Context) (e error) {
 	defer tx.Close()
 
 	for _, userId := range input.Subscribers {
-		payment := &models.PurchaseSubscription{
+		payment := &db.PurchaseSubscription{
 			PurchaseId: purchase.Id,
 			Status:     Statuses["created"],
 			UserId:     userId,
@@ -63,22 +63,22 @@ func (h DBHandler) createPurchase(c echo.Context) (e error) {
 	}
 	tx.Commit()
 	message := fmt.Sprintf("A new purchase (%s) was made and your share is %.1f", purchase.Name, purchase.SharePrice)
-	notifyUsers(h, input.Subscribers, message, "New Purchase")
+	notifyUsers(input.Subscribers, message, "New Purchase")
 	response := map[string]interface{}{
 		"purchase": purchase,
 	}
 	return c.JSON(http.StatusCreated, response)
 }
 
-func (h DBHandler) getUnPaidPurchases(c echo.Context) (e error) {
+func getUnPaidPurchases(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var err error
 	users := c.QueryParams().Get("users")
 	createdAt := c.QueryParams().Get("createdAt")
-	subscriptions := &[]models.PurchaseSubscription{}
+	subscriptions := &[]db.PurchaseSubscription{}
 	userId := c.Get("userId")
 
-	query := h.DB.Model(subscriptions).
+	query := db.Database.Model(subscriptions).
 		Where("purchase_subscription.user_id = ?", userId).
 		Where("status = ?", Statuses["created"]).
 		Relation("Purchase").
@@ -109,20 +109,20 @@ func (h DBHandler) getUnPaidPurchases(c echo.Context) (e error) {
 	return c.JSON(http.StatusOK, response)
 }
 
-func (h DBHandler) getPurchaseDetail(c echo.Context) (e error) {
+func getPurchaseDetail(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var err error
 
-	purchase := &models.Purchase{Id: c.Param("purchaseId")}
-	err = h.DB.Model(purchase).WherePK().Relation("User.full_name").Select()
+	purchase := &db.Purchase{Id: c.Param("purchaseId")}
+	err = db.Database.Model(purchase).WherePK().Relation("User.full_name").Select()
 	if err != nil {
 		logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
 
 	if purchase.UserId == c.Get("userId") {
-		payments := &[]models.PurchaseSubscription{}
-		err = h.DB.Model(payments).Where("purchase_id = ? ", c.Param("purchaseId")).Relation("User.full_name").Select()
+		payments := &[]db.PurchaseSubscription{}
+		err = db.Database.Model(payments).Where("purchase_id = ? ", c.Param("purchaseId")).Relation("User.full_name").Select()
 		if err != nil {
 			logger.Error(err.Error())
 			return c.JSON(http.StatusInternalServerError, err.Error())
@@ -140,7 +140,7 @@ func (h DBHandler) getPurchaseDetail(c echo.Context) (e error) {
 		"subscribers": 0,
 	}
 
-	err = h.DB.Model(&models.PurchaseSubscription{}).
+	err = db.Database.Model(&db.PurchaseSubscription{}).
 		Where("purchase_id = ? ", c.Param("purchaseId")).
 		ColumnExpr("count(*) as subscribers").
 		Select(&countResult)
@@ -157,18 +157,18 @@ func (h DBHandler) getPurchaseDetail(c echo.Context) (e error) {
 	return c.JSON(http.StatusOK, response)
 }
 
-func (h DBHandler) requestPaymentConformation(c echo.Context) (e error) {
+func requestPaymentConformation(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var err error
 	userId := fmt.Sprintf("%s", c.Get("userId"))
 	purchaseId := c.Param("purchaseId")
 
-	payment := &models.PurchaseSubscription{
+	payment := &db.PurchaseSubscription{
 		PurchaseId: purchaseId,
 		UserId:     userId,
 	}
 
-	err = h.DB.Model(payment).
+	err = db.Database.Model(payment).
 		Where("purchase_id = ?", purchaseId).
 		Where("purchase_subscription.user_id = ? ", userId).
 		Relation("User.full_name").
@@ -186,7 +186,7 @@ func (h DBHandler) requestPaymentConformation(c echo.Context) (e error) {
 	}
 
 	payment.Status = Statuses["pending"]
-	_, err = h.DB.Model(payment).Where("user_id = ?", userId).Where("purchase_id = ?", purchaseId).Column("status").Update()
+	_, err = db.Database.Model(payment).Where("user_id = ?", userId).Where("purchase_id = ?", purchaseId).Column("status").Update()
 	if err != nil {
 		logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
@@ -209,12 +209,12 @@ func (h DBHandler) requestPaymentConformation(c echo.Context) (e error) {
 	return c.JSON(http.StatusOK, response)
 }
 
-func (h DBHandler) confirmPayment(c echo.Context) (e error) {
+func confirmPayment(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var err error
 
-	subscription := &models.PurchaseSubscription{Id: c.Param("purchaseSubscriptionId")}
-	err = h.DB.Model(subscription).WherePK().Relation("Purchase.user_id").Select()
+	subscription := &db.PurchaseSubscription{Id: c.Param("purchaseSubscriptionId")}
+	err = db.Database.Model(subscription).WherePK().Relation("Purchase.user_id").Select()
 	if err != nil {
 		logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
@@ -224,12 +224,12 @@ func (h DBHandler) confirmPayment(c echo.Context) (e error) {
 		return c.JSON(http.StatusUnauthorized, "You're not allowed")
 	}
 
-	payment := &models.PurchaseSubscription{
+	payment := &db.PurchaseSubscription{
 		Id:     subscription.Id,
 		Status: Statuses["approved"],
 	}
 
-	_, err = h.DB.Model(payment).WherePK().Column("status").Update()
+	_, err = db.Database.Model(payment).WherePK().Column("status").Update()
 	if err != nil {
 		logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
@@ -247,12 +247,12 @@ func (h DBHandler) confirmPayment(c echo.Context) (e error) {
 	return c.JSON(http.StatusOK, response)
 }
 
-func (h DBHandler) rejectPayment(c echo.Context) (e error) {
+func rejectPayment(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var err error
 
-	subscription := &models.PurchaseSubscription{Id: c.Param("purchaseSubscriptionId")}
-	err = h.DB.Model(subscription).
+	subscription := &db.PurchaseSubscription{Id: c.Param("purchaseSubscriptionId")}
+	err = db.Database.Model(subscription).
 		WherePK().
 		Relation("User.firebase_token").
 		Relation("Purchase.name").
@@ -268,12 +268,12 @@ func (h DBHandler) rejectPayment(c echo.Context) (e error) {
 		return c.JSON(http.StatusUnauthorized, "You're not allowed")
 	}
 
-	payment := &models.PurchaseSubscription{
+	payment := &db.PurchaseSubscription{
 		Id:     subscription.Id,
 		Status: Statuses["rejected"],
 	}
 
-	_, err = h.DB.Model(payment).WherePK().Column("status").Update()
+	_, err = db.Database.Model(payment).WherePK().Column("status").Update()
 	if err != nil {
 		logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
@@ -290,14 +290,14 @@ func (h DBHandler) rejectPayment(c echo.Context) (e error) {
 	return c.JSON(http.StatusOK, response)
 }
 
-func (h DBHandler) exemptPayment(c echo.Context) (e error) {
+func exemptPayment(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var err error
 	purchaseId := c.Param("purchaseId")
 	userId := c.Get("userId")
 
-	purchase := &models.Purchase{Id: purchaseId}
-	err = h.DB.Model(purchase).WherePK().Select()
+	purchase := &db.Purchase{Id: purchaseId}
+	err = db.Database.Model(purchase).WherePK().Select()
 	if err != nil {
 		logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
@@ -307,14 +307,14 @@ func (h DBHandler) exemptPayment(c echo.Context) (e error) {
 		return c.JSON(http.StatusUnauthorized, "You're not allowed")
 	}
 
-	payments := &[]models.PurchaseSubscription{}
-	err = h.DB.Model(payments).Where("purchase_id = ?", purchaseId).Select()
+	payments := &[]db.PurchaseSubscription{}
+	err = db.Database.Model(payments).Where("purchase_id = ?", purchaseId).Select()
 	if err != nil {
 		logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
 
-	tx, err := h.DB.Begin()
+	tx, err := db.Database.Begin()
 	if err != nil {
 		tx.Rollback()
 		logger.Error(err.Error())
@@ -346,15 +346,15 @@ func (h DBHandler) exemptPayment(c echo.Context) (e error) {
 		ids = append(ids, payment.UserId)
 	}
 	message := fmt.Sprintf("Purchase (%s) was exempted. You no longer have to pay it", purchase.Name)
-	notifyUsers(h, ids, message, "Purchase exempted")
+	notifyUsers(ids, message, "Purchase exempted")
 
 	return c.JSON(http.StatusOK, response)
 }
 
-func notifyUsers(h DBHandler, ids []string, message string, title string) error {
+func notifyUsers(ids []string, message string, title string) error {
 	var err error
-	users := &[]models.User{}
-	err = h.DB.Model(users).Where("id IN (?)", pg.In(ids)).Column("firebase_token").Select()
+	users := &[]db.User{}
+	err = db.Database.Model(users).Where("id IN (?)", pg.In(ids)).Column("firebase_token").Select()
 	if err != nil {
 		return err
 	}

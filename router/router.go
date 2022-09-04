@@ -6,8 +6,8 @@ import (
 )
 
 // SetupRoutes sets up the routes for the server
-func SetupRoutes(e *echo.Echo, h handlers.DBHandler) {
+func SetupRoutes(e *echo.Echo) {
 	api := e.Group("/api")
 	v1 := api.Group("/v1")
-	handlers.RegisterRoutes(v1, h)
+	handlers.RegisterRoutes(v1)
 }
