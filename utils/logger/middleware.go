@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// LoggerMiddleware is a middleware that logs the request information
 func LoggerMiddleware() echo.MiddlewareFunc {
 	log := GetLoggerInstance()
 	defer log.Sync()
