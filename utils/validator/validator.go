@@ -9,7 +9,7 @@ import (
 
 var validate *validator.Validate
 
-// New returns an insatnce of the validator
+// New returns an instance of the validator
 // that formats JSON fields
 func New() *validator.Validate {
 	if validate == nil {

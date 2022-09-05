@@ -6,7 +6,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/mustafabalila/golang-api/config"
-	router "github.com/mustafabalila/golang-api/router"
+	"github.com/mustafabalila/golang-api/router"
 	"github.com/mustafabalila/golang-api/utils/logger"
 )
 

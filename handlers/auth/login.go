@@ -1,7 +1,6 @@
-package handlers
+package auth
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/go-pg/pg/v10"
@@ -13,58 +12,18 @@ import (
 	"github.com/mustafabalila/golang-api/utils/validator"
 )
 
-func createUser(c echo.Context) (e error) {
-	logger := logger.GetLoggerInstance()
-	var _, err error
-	auth := &CreateUser{}
-	err = c.Bind(&auth)
-	if err != nil {
-		return err
-	}
-
-	validate := validator.New()
-	err = validate.Struct(auth)
-	if err != nil {
-		logger.Error(err.Error())
-		return err
-	}
-
-	user := &db.User{
-		FullName: auth.FullName,
-		Password: auth.Password,
-		Email:    auth.Email,
-	}
-
-	// check if user already exists
-	existingUser := &db.User{}
-	err = db.Database.Model(existingUser).Where("email = ?", user.Email).Select()
-	if err != pg.ErrNoRows {
-		return c.JSON(http.StatusConflict, "User already exists")
-	}
-
-	err = user.HashPassword()
-	if err != nil {
-		logger.Error(err.Error())
-		return c.JSON(http.StatusInternalServerError, err.Error())
-	}
-
-	_, err = db.Database.Model(user).Insert()
-	if err != nil {
-		logger.Error(err.Error())
-		return c.JSON(http.StatusInternalServerError, err.Error())
-	}
-
-	response := map[string]interface{}{
-		"user": user,
-	}
-	return c.JSON(http.StatusCreated, response)
+type loginInput struct {
+	Password      string `json:"password" validate:"required,min=8"`
+	Email         string `json:"email" validate:"required,email"`
+	FirebaseToken string `json:"firebaseToken" validate:"required"`
 }
 
-func loginUser(c echo.Context) (e error) {
+// Login logs in a user and returns a JWT token and the user Id.
+func Login(c echo.Context) (e error) {
 	logger := logger.GetLoggerInstance()
 	var _, err error
 	var user = &db.User{}
-	auth := &Login{}
+	auth := &loginInput{}
 	err = c.Bind(auth)
 	if err != nil {
 		logger.Error(err.Error())
@@ -117,28 +76,6 @@ func loginUser(c echo.Context) (e error) {
 	response := map[string]interface{}{
 		"token":  tokenString,
 		"userId": user.Id,
-	}
-	return c.JSON(http.StatusOK, response)
-}
-
-func validateSession(c echo.Context) (e error) {
-	logger := logger.GetLoggerInstance()
-	var _, err error
-	userId := fmt.Sprintf("%s", c.Get("userId"))
-	var user = &db.User{Id: userId}
-
-	err = db.Database.Model(user).WherePK().Select()
-
-	if err == pg.ErrNoRows {
-		return c.JSON(http.StatusForbidden, "Invalid token")
-	}
-	if err != nil {
-		logger.Error(err.Error())
-		return err
-	}
-
-	response := map[string]interface{}{
-		"user": user,
 	}
 	return c.JSON(http.StatusOK, response)
 }
