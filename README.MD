@@ -27,7 +27,7 @@ We're a group of friends sharing the same house hold and having troubles keeping
 -	Go [air](https://github.com/cosmtrek/air) 
 
 ### Schema
-Link will be available soon
+-	[Database schema](https://github.com/mustafabalila/house-keeper-db-schema)
  ### Environment
 
  See [config](./.env.sample).
